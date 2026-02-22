@@ -1,43 +1,83 @@
 ```
-app/
-├── api/                         # FastAPI route definitions
-│   └── routes.py
+backend/
 │
-├── db/                          # Database connection & models
-│   ├── database.py
-│   └── models.py
+├── app/
+│   ├── main.py                      # FastAPI entrypoint
+│   │
+│   ├── api/                         # Route layer
+│   │   ├── routes.py
+│   │   ├── jobs.py
+│   │   ├── detections.py
+│   │   ├── estimation.py
+│   │   └── health.py
+│   │
+│   ├── core/                        # Core configs
+│   │   ├── config.py
+│   │   ├── logging.py
+│   │   ├── security.py
+│   │   └── exceptions.py
+│   │
+│   ├── db/                          # Database layer
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   └── migrations/
+│   │
+│   ├── schemas/                     # Pydantic schemas
+│   │   ├── job.py
+│   │   ├── detection.py
+│   │   ├── estimation.py
+│   │   └── common.py
+│   │
+│   ├── services/                    # Business logic
+│   │   ├── job_service.py
+│   │   ├── detection_service.py
+│   │   ├── estimation_service.py
+│   │   ├── storage_service.py
+│   │   └── health_service.py
+│   │
+│   ├── messaging/                   # RabbitMQ integration
+│   │   ├── connection.py
+│   │   ├── publisher.py             # Publish job.created
+│   │   ├── consumer.py              # Consume job.completed/failed
+│   │   └── handlers.py              # Result message handlers
+│   │
+│   ├── repositories/                # DB abstraction layer
+│   │   ├── job_repository.py
+│   │   ├── detection_repository.py
+│   │   └── base.py
+│   │
+│   └── utils/
+│       ├── file_utils.py
+│       └── validators.py
 │
-├── schemas/                     # Pydantic request/response schemas
-│   ├── job.py
-│   ├── detection.py
-│   └── estimation.py
+├── tests/
+│   ├── test_jobs.py
+│   ├── test_estimation.py
+│   └── test_messaging.py
 │
-├── services/                    # Business logic & data access
-│   ├── upload_job.py
-│   ├── process_job.py
-│   ├── get_job.py
-│   ├── generate_estimation.py
-│   └── healthcheck.py
-│
-├── tests/                       # Pytest test suite(later)
-│   ├── conftest.py
-│   └── test_routes.py
-│
-├── main.py                      # FastAPI application entrypoint
-├── Dockerfile                   # Docker build instructions
-├── Makefile                     # Task shortcuts (later)
-├── requirements.txt             # Dependencies
-└── .env.dev                     # Development environment variables
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── Makefile
+└── .env.dev
 ```
-# Blueprint AI Estimation Backend
+# Blueprint AI Backend
 
-## API Contract Specification (v1.0)
+## REST API Specification (Image Enabled) – v1.0
 
 ---
 
 # 1. Overview
 
-This document defines the official request and response JSON contract for the Blueprint AI Estimation Backend. All clients (Web, Flutter, Admin tools) and the AI inference service must strictly adhere to this specification.
+This document defines the REST API contract for the Blueprint AI Backend.
+
+Responsibilities:
+
+* Accept blueprint uploads
+* Manage job lifecycle
+* Communicate with AI via RabbitMQ
+* Store image URLs (original + annotated)
+* Expose detection and estimation data to frontend
 
 Base URL:
 
@@ -45,24 +85,24 @@ Base URL:
 /api/v1
 ```
 
-All timestamps are ISO 8601 (UTC).
-All IDs are UUID v4.
-All responses use JSON.
+All timestamps: ISO 8601 (UTC)
+All IDs: UUID v4
+All responses: application/json
 
 ---
 
-# 2. Global Response Standards
+# 2. Global Response Format
 
-## 2.1 Success Response Structure
+## Success
 
 ```json
 {
   "data": {},
-  "message": "Optional informational message"
+  "message": "Optional message"
 }
 ```
 
-## 2.2 Error Response Structure
+## Error
 
 ```json
 {
@@ -74,7 +114,16 @@ All responses use JSON.
 
 ---
 
-# 3. Create Blueprint Job
+# 3. Job Lifecycle
+
+```
+PENDING → QUEUED → PROCESSING → COMPLETED
+                           ↘ FAILED
+```
+
+---
+
+# 4. Create Job
 
 ## Endpoint
 
@@ -90,122 +139,38 @@ Field:
 
 * file (PDF | PNG | JPG)
 
-Optional JSON metadata:
+Optional metadata:
 
 ```json
 {
-  "project_name": "Hospital Layout - Phase 1",
+  "project_name": "Residential Layout A",
   "confidence_threshold": 0.25
 }
 ```
 
-## Success Response (201)
+## Response (201)
 
 ```json
 {
   "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
+    "job_id": "uuid",
     "status": "PENDING",
-    "file_name": "blueprint.pdf",
+    "original_image_url": "https://storage/original/uuid.png",
     "created_at": "2026-02-22T10:25:41Z"
   }
 }
 ```
 
-## Validation Error (400)
+Backend Actions:
 
-```json
-{
-  "error": "INVALID_FILE_TYPE",
-  "message": "Only PDF, PNG, JPG files are allowed.",
-  "details": {}
-}
-```
+* Store original image in object storage
+* Insert DB record
+* Publish job message to RabbitMQ
+* Update status → QUEUED
 
 ---
 
-# 4. Trigger Job Processing
-
-## Endpoint
-
-```
-POST /jobs/{job_id}/process
-```
-
-## Request
-
-```json
-{
-  "confidence_threshold": 0.25,
-  "model_version": "v1.2.0"
-}
-```
-
-## Response
-
-```json
-{
-  "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
-    "status": "PROCESSING",
-    "started_at": "2026-02-22T10:26:01Z"
-  },
-  "message": "AI processing started"
-}
-```
-
----
-
-# 5. AI Service Contract
-
-## Backend → AI Service Request
-
-```json
-{
-  "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
-  "file_url": "https://storage/blueprint.pdf",
-  "confidence_threshold": 0.25
-}
-```
-
-## AI → Backend Success Response
-
-```json
-{
-  "model_version": "yolo_v8_symbol_2.1",
-  "processing_time_ms": 4820,
-  "image_width": 2480,
-  "image_height": 3508,
-  "detections": [
-    {
-      "label": "valve",
-      "confidence": 0.91,
-      "bbox": {
-        "x1": 104,
-        "y1": 233,
-        "x2": 189,
-        "y2": 305
-      }
-    }
-  ]
-}
-```
-
-## AI Failure Response
-
-```json
-{
-  "error": "MODEL_INFERENCE_FAILED",
-  "message": "Unable to process image",
-  "details": {
-    "reason": "CUDA out of memory"
-  }
-}
-```
-
----
-
-# 6. Get Job Status
+# 5. Get Job Status
 
 ## Endpoint
 
@@ -218,10 +183,10 @@ GET /jobs/{job_id}
 ```json
 {
   "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
+    "job_id": "uuid",
     "status": "PROCESSING",
-    "progress": 65,
-    "started_at": "2026-02-22T10:26:01Z"
+    "original_image_url": "https://storage/original/uuid.png",
+    "progress": 55
   }
 }
 ```
@@ -231,37 +196,27 @@ GET /jobs/{job_id}
 ```json
 {
   "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
+    "job_id": "uuid",
     "status": "COMPLETED",
-    "model_version": "yolo_v8_symbol_2.1",
-    "processing_time_ms": 4820,
+    "original_image_url": "https://storage/original/uuid.png",
+    "annotated_image_url": "https://storage/annotated/uuid.png",
+    "image_size": {
+      "width": 2480,
+      "height": 3508
+    },
     "symbol_counts": {
       "valve": 12,
-      "pump": 4,
-      "junction": 6
+      "pump": 4
     },
-    "total_detections": 22,
-    "created_at": "2026-02-22T10:25:41Z",
+    "total_detections": 16,
     "completed_at": "2026-02-22T10:26:09Z"
-  }
-}
-```
-
-## Failed Response
-
-```json
-{
-  "error": "MODEL_TIMEOUT",
-  "message": "AI service did not respond within timeout window",
-  "details": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12"
   }
 }
 ```
 
 ---
 
-# 7. Get Full Detection Details
+# 6. Get Detection Details
 
 ## Endpoint
 
@@ -274,7 +229,9 @@ GET /jobs/{job_id}/detections
 ```json
 {
   "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
+    "job_id": "uuid",
+    "original_image_url": "https://storage/original/uuid.png",
+    "annotated_image_url": "https://storage/annotated/uuid.png",
     "image_size": {
       "width": 2480,
       "height": 3508
@@ -284,10 +241,10 @@ GET /jobs/{job_id}/detections
         "label": "valve",
         "confidence": 0.91,
         "bbox": {
-          "x1": 104,
-          "y1": 233,
-          "x2": 189,
-          "y2": 305
+          "x1": 100,
+          "y1": 200,
+          "x2": 180,
+          "y2": 280
         }
       }
     ]
@@ -295,9 +252,15 @@ GET /jobs/{job_id}/detections
 }
 ```
 
+Purpose:
+
+* original_image_url → base render
+* annotated_image_url → preview render
+* detections → dynamic frontend drawing
+
 ---
 
-# 8. Generate Estimation
+# 7. Generate Estimation
 
 ## Endpoint
 
@@ -310,32 +273,24 @@ GET /jobs/{job_id}/estimation
 ```json
 {
   "data": {
-    "job_id": "3f8a9f90-cc12-4b91-9f3d-3d4c9e1f0a12",
-    "estimation_summary": {
-      "total_symbols": 22,
-      "material_breakdown": [
-        {
-          "symbol": "valve",
-          "count": 12,
-          "unit_cost": 1500,
-          "total_cost": 18000
-        },
-        {
-          "symbol": "pump",
-          "count": 4,
-          "unit_cost": 5000,
-          "total_cost": 20000
-        }
-      ],
-      "grand_total_cost": 38000
-    }
+    "job_id": "uuid",
+    "total_symbols": 16,
+    "material_breakdown": [
+      {
+        "symbol": "valve",
+        "count": 12,
+        "unit_cost": 1500,
+        "total_cost": 18000
+      }
+    ],
+    "grand_total_cost": 38000
   }
 }
 ```
 
 ---
 
-# 9. Health Check
+# 8. Health Check
 
 ## Endpoint
 
@@ -351,32 +306,12 @@ GET /health
     "status": "healthy",
     "services": {
       "database": "connected",
-      "ai_service": "reachable"
-    },
-    "uptime_seconds": 15234
+      "rabbitmq": "connected"
+    }
   }
 }
 ```
 
 ---
 
-# 10. Status Lifecycle
-
-```
-PENDING → PROCESSING → COMPLETED
-                     ↘ FAILED
-```
-
----
-
-# 11. Validation Rules
-
-* confidence_threshold: float (0.0 – 1.0)
-* bbox coordinates: integer pixel values
-* total_detections: non-negative integer
-* unit_cost & total_cost: positive integers
-* UUID: valid v4 format
-
----
-
-End of Specification (v1.0)
+End of Backend REST API Specification
