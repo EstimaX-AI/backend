@@ -5,7 +5,7 @@ class Setting(BaseSettings):
     db_host_name : str
     db_port : int
     db_name : str
-    password : str
+    db_password : str
 
 
     mq_url : str

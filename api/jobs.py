@@ -1,26 +1,22 @@
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File
+from services.storage_service import StorageService
 from services.job_service import JobService
-import os
+import uuid
 
 router = APIRouter()
-
-
 @router.post("/jobs")
-async def create_job(
-    file: UploadFile = File(...),
-    project_name: str = Form(...)
-):
+async def create_job(file: UploadFile = File(...)):
 
-    # Save file locally (temporary)
-    os.makedirs("uploads", exist_ok=True)
-    file_path = f"uploads/{file.filename}"
+    file_bytes = await file.read()
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    filename = f"{uuid.uuid4()}.pdf"
 
-    result = JobService.process_job(
-        project_name=project_name,
-        original_image_path=file_path
-    )
+    signed_url = StorageService.upload_pdf(file_bytes, filename)
 
-    return result
+    job = JobService.create_job(None, signed_url)
+
+    return {
+        "job_id": str(job.id),
+        "pdf_url": signed_url,
+        "status": job.status
+    }

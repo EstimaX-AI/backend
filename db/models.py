@@ -63,7 +63,7 @@ class Job(Base):
         nullable=True,  # auth not required for MVP
     )
 
-    project_name = Column(String(255))
+    project_name = Column(String(10))
 
     original_image_path = Column(Text, nullable=False)
     annotated_image_path = Column(Text)
