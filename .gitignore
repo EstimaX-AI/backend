@@ -71,6 +71,8 @@ logs/
 htmlcov/
 .tox/
 .nox/
+uploads/
+tests/
 
 # =========================
 # Type Checking
