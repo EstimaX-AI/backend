@@ -1,1 +1,7 @@
+fastapi
+uvicorn[standard]
 pydantic-settings
+python-dotenv
+pika
+sqlalchemy
+psycopg2-binary
