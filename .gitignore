@@ -106,3 +106,8 @@ docker-compose.override.yml
 *.onnx
 models/
 checkpoints/
+
+
+uploads/
+tests/
+
