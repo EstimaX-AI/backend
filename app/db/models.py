@@ -13,23 +13,13 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.db.database import Base
-
-
-# =========================
-# ENUMS
-# =========================
+from db.database import Base
 
 class JobStatus(str, enum.Enum):
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
-
-
-# =========================
-# USERS TABLE
-# =========================
 
 class User(Base):
     __tablename__ = "users"
@@ -44,11 +34,6 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
     jobs = relationship("ProcessingJob", back_populates="user", cascade="all, delete")
-
-
-# =========================
-# PROCESSING JOBS TABLE
-# =========================
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
@@ -67,8 +52,6 @@ class ProcessingJob(Base):
     )
 
     result = Column(JSONB, nullable=True)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
-
     user = relationship("User", back_populates="jobs")

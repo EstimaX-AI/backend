@@ -3,7 +3,7 @@ import boto3
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env.dev")
 
 S3_ENDPOINT = os.getenv("SUPABASE_S3_ENDPOINT")
 ACCESS_KEY = os.getenv("SUPABASE_ACCESS_KEY")
