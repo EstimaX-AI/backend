@@ -1,17 +1,13 @@
-from fastapi import APIRouter, UploadFile, File, Form
-from app.services.storage_service import upload_pdf
-from app.services.job_service import create_job_service
+from fastapi import APIRouter, UploadFile, File
+from services.storage_service import upload_pdf
+from services.job_service import JobService
 import uuid
-from uuid import UUID
 
 router = APIRouter()
 
 
 @router.post("/jobs")
-async def create_job(
-    user_id: UUID | None = Form(None),
-    file: UploadFile = File(...)
-):
+async def create_job(file: UploadFile = File(...)):
 
     file_bytes = await file.read()
 
@@ -19,11 +15,15 @@ async def create_job(
 
     signed_url = upload_pdf(file_bytes, filename)
 
-    job = create_job_service(user_id, signed_url)
+    job = JobService.create_job(None, signed_url)
 
     return {
         "job_id": str(job.job_id),
-        "user_id": str(user_id) if user_id is not None else None,
         "pdf_url": signed_url,
-        "status": job.status.value
+        "status": job.status
     }
+
+
+@router.get("/jobs/{job_id}/result")
+def get_job_result(job_id: uuid.UUID):
+    return JobService.get_job_result(job_id)

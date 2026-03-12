@@ -3,7 +3,7 @@ import json
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env.dev")
 
 def publish_to_queue(queue_name, message):
 
